@@ -1,0 +1,516 @@
+---
+title: "What BMI and self-report miss: biomarker cardiometabolic risk and unrecognised lipid abnormalities among Australian adults"
+subtitle: "STAT3888 / NUTM3888 \\textendash{} Team 15 full analysis manuscript"
+author: "Team 15"
+date: "3 September 2026"
+output:
+  pdf_document:
+    latex_engine: pdflatex
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    fig_caption: true
+    extra_dependencies: ["booktabs", "longtable", "float", "placeins", "setspace", "caption", "colortbl", "xcolor"]
+fontsize: 11pt
+geometry: margin=2cm
+urlcolor: blue
+header-includes:
+  - \usepackage{caption}
+  - \usepackage{float}
+  - \usepackage{placeins}
+  - \usepackage{setspace}
+  - \setstretch{1.12}
+  - \captionsetup{font=small, skip=4pt}
+  - \floatplacement{figure}{H}
+  - \floatplacement{table}{H}
+  - \setlength{\parskip}{0.35em}
+  - \setlength{\parindent}{0pt}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, message = FALSE, warning = FALSE,
+  fig.align = "center", out.width = "0.92\\textwidth"
+)
+library(readr); library(dplyr); library(tidyr); library(knitr); library(kableExtra)
+TAB <- "../outputs/tables"
+FIG <- "../outputs/figures"
+fig <- function(f) knitr::include_graphics(file.path(FIG, f))
+ktab <- function(x, cap = NULL, digits = 3, escape = TRUE) {
+  kable(x, booktabs = TRUE, caption = cap, digits = digits, escape = escape,
+        linesep = "") |>
+    kable_styling(latex_options = c("hold_position", "scale_down"),
+                  font_size = 8, full_width = FALSE)
+}
+```
+
+\begin{abstract}
+BMI is widely used as a proxy for cardiometabolic health, and self-report is widely used as a proxy for diagnosed high cholesterol. Using the Australian Health Survey 2011--13 Basic CURFs we show that both substitutions are weak, and that routinely collected non-laboratory information does not close the gap. In the National Nutrition and Physical Activity Survey (NNPAS), BMI category agrees only modestly with a five-factor biomarker cardiometabolic risk score that excludes adiposity by construction (Cohen's $\kappa=0.25$; $n=3{,}525$). Age out-discriminates BMI. After survey-weighted adjustment, only age, BMI, smoking and self-rated health are associated with elevated risk; no dietary or physical-activity variable survives Holm correction, and no BMI-class interaction does either. Nested elastic-net models raise out-of-sample AUC from 0.70 (age + sex) to 0.76 (age + sex + BMI); twenty-one further diet, activity and socioeconomic variables add 0.007 --- 13\% of the gain that BMI itself provides --- and a food-file discretionary-energy check does not reverse the diet null. In the National Health Survey (NHS), the published finding that $\approx 89\%$ of measured high total cholesterol is unreported reproduces (88.3\%), but a full non-laboratory model cannot identify that group any better than age and sex (AUC 0.58) and cannot beat the existing age-45 testing rule. The same information \emph{does} discriminate low HDL (AUC 0.71) and systematically misses younger and more disadvantaged adults. The two surveys are not pooled. Negative diet findings are interpreted as measurement error in a single 24-hour recall, not as evidence that diet is biologically irrelevant.
+\end{abstract}
+
+**Keywords.** Australian Health Survey; BMI; cardiometabolic risk; dyslipidaemia; HDL cholesterol; screening; survey-weighted inference; out-of-sample prediction.
+
+# Introduction
+
+Australian cardiovascular guidelines assess *absolute* risk rather than any single marker [1,2], yet the information most readily available before a blood test is still BMI and what people say they have been told. Two substitutions follow, and both are questionable.
+
+First, BMI is treated as a proxy for metabolic health. A substantial minority of normal-weight adults cluster cardiometabolic abnormalities, and a minority of obese adults do not [3--5]. On the same files we use here, Engelen et al.\ [8] linked sitting time and physical activity to cardiovascular disease, diabetes and metabolic syndrome, treating waist circumference as ``a proxy measure of abdominal obesity (BMI)''. Whether that substitution is defensible is an empirical question.
+
+Second, high cholesterol is common, asymptomatic and usually detected only by a blood test. In 2011--12 about one-third of Australian adults had high measured total cholesterol, and most did not report a diagnosis [6,7]. A non-laboratory rule would justify itself only if it improved on the age-45 testing trigger already used in Australian practice [1]. Non-laboratory CVD *risk* scores can approach laboratory versions for future events [9]; that literature predicts events, not current abnormal lipids, and is not copied here.
+
+This manuscript reports the full Team 15 analysis of the Australian Health Survey (AHS) 2011--13 Basic Confidentialised Unit Record Files. It has four parts: (i) data integrity and descriptive epidemiology on the National Nutrition and Physical Activity Survey (NNPAS); (ii) a reproduction of Engelen et al.\ [8]; (iii) three research questions on cardiometabolic health beyond BMI; (iv) the group's candidate question on unrecognised lipid abnormalities, using the National Health Survey (NHS). The surveys do not share a sample and are never pooled. Every figure produced by the pipeline is presented below; key numerical tables sit in the text and the remainder in the appendix.
+
+**Cardiometabolic questions (NNPAS).**
+
+- **C-RQ1.** Among Australian adults, how strongly does BMI category agree with cardiometabolic risk defined from blood pressure, glucose, lipids and liver enzymes?
+- **C-RQ2.** Which dietary, physical-activity, demographic and socioeconomic characteristics distinguish adults with elevated biomarker risk, and do those associations differ by BMI class?
+- **C-RQ3.** Do dietary, physical-activity and socioeconomic variables improve out-of-sample prediction of elevated cardiometabolic risk beyond age, sex and BMI?
+
+**Lipid-screening questions (NHS).**
+
+- **L-RQ1.** How accurately can routinely available non-laboratory characteristics identify adults with unrecognised lipid abnormalities, especially low HDL cholesterol?
+- **L-RQ2.** Does that accuracy differ across age, sex and socioeconomic groups, and which groups are most likely to be missed?
+
+A third lipid candidate --- using BMI or waist to flag high *total* cholesterol --- is reported as a feasibility check and is not taken forward as a primary outcome.
+
+# Methods
+
+## Data
+
+The AHS 2011--13 Basic CURFs cover three surveys in this dump: the National Health Survey 2011--12 (`AHSnhs11b*`; 20,426 persons), the National Nutrition and Physical Activity Survey 2011--12 (`AHSnpa11b*`; 12,153 persons), and the National Aboriginal and Torres Strait Islander NPA Survey 2012--13 (`inp13b*`; 4,109 persons). The last is inventory-checked but not modelled.
+
+NNPAS files are hierarchical and link on ABS identifiers: person (`AHSnpa11bp`, 12,153 rows), biomedical (`AHSnpa11bb`), food occasion (`AHSnpa11bf`, 341,897 rows), supplement and Australian Dietary Guideline (ADG) summary. `ABSHID` + `ABSPID` is the unique person identifier. In the NHS, `ABSPID` is only the within-household person number (it runs 1--6 and is not unique); the key is `ABSLID` + `ABSPID`. NHS self-reported high cholesterol is not a person-level flag; it is derived from the long-format conditions file as ICD-10 group 14693 (``High cholesterol'') with `CONDSTAT` for currency.
+
+The Basic CURF releases lipids, glucose and HbA1c as ordered bands, not continuous values. Status flags (`CHOLNTR`, `HDLCHSEX`, `LDLNTR`, `CVDMEDST`) sit on clinical cut-points and are preferred for inference. Sentinel missing-value codes depend on field width and are mapped to `NA` in `03_prepare_data.R` and `10_nhs_chol_build.R`.
+
+Person-level replicate weights exist in both surveys: `WPM0101`--`WPM0160` (NNPAS person), `RPWGT01`--`RPWGT60` (biomedical), `NHSFINWT` / `NHMSPERW` (NHS). Variance estimation uses delete-a-group jackknife (`svrepdesign`, type `JK1`, scale $59/60$) whenever the corresponding weights are available.
+
+## Cardiometabolic outcome (NNPAS)
+
+Elevated cardiometabolic risk (`cmr_elevated`) is defined as two or more of five factors, none of which is an adiposity measure:
+
+1. Raised blood pressure: $\ge 130/85$ mmHg or reported hypertension (`SYSTOL`, `DIASTOL`, `HYPBC`).
+2. Dysglycaemia: fasting glucose $>6.0$ mmol/L, HbA1c $\ge 6.0\%$, or reported diabetes.
+3. Low HDL: $<1.0$ (men) / $<1.3$ (women) mmol/L (`HDLCHSEX`).
+4. High total cholesterol: $\ge 5.5$ mmol/L (`CHOLNTR`).
+5. Elevated liver enzymes: abnormal ALT or GGT (`ALTNTR`, `GGTNTR`).
+
+ABS status flags are used instead of band midpoints, so the score is point-identified. Fasting-dependent markers (LDL, triglycerides, fasting glucose as a required input) are excluded from the core score to keep $n=3{,}525$ rather than $\approx 2{,}950$; a seven-marker fasting sensitivity analysis is reported. Waist and BMI are excluded from the outcome by construction.
+
+## Lipid outcomes (NHS)
+
+Four variants are carried:
+
+- measured high total cholesterol (`CHOLNTR == 2`);
+- high total cholesterol with no current self-report (the original candidate definition);
+- sex-specific low HDL (`HDLCHSEX == 2`);
+- untreated dyslipidaemia (`CVDMEDST == 3`: not on lipid medication, abnormal lipids). `CVDMEDST` is defined only for respondents who fasted 8 hours.
+
+HDL/LDL ratios are not computable: both lipids are released as ordered bands.
+
+## Statistical analysis
+
+Descriptive NNPAS figures are unweighted sample descriptions unless a caption says otherwise. Inferential NNPAS models (Engelen reproduction, C-RQ1 agreement, C-RQ2) and all NHS prevalence, odds ratios and AUCs use biomedical or person replicate weights as appropriate.
+
+C-RQ2 is a survey-weighted logistic model of elevated risk with BMI-class $\times$ predictor interactions, fitted on the full biomedical sample rather than the normal-BMI stratum alone. Joint Wald tests are Holm-adjusted across 18 predictors. Total energy is omitted because it correlates 0.89 with the energy-intake-to-BMR ratio; nutrients enter as densities or percentage of energy.
+
+C-RQ3 and L-RQ1 use nested elastic-net logistic regression ($\alpha=0.5$) with the penalty tuned inside each training fold. C-RQ3: 20 $\times$ 5-fold repeated stratified cross-validation; paired AUC differences use a 2,000-resample bootstrap *over individuals*. L-RQ1: 5 $\times$ 10-fold CV and weighted AUC. Screening value is compared with ``test everyone aged 45+'' at matched testing volume. L-RQ2 evaluates a single 40\% flag-rate threshold within age, sex and SEIFA groups, and models five-year testing history (`CHOL5YR`) among adults 45+.
+
+Analyses were run in R 4.4--4.5 with `survey`, `glmnet` and `data.table`. The pipeline is `R/01` through `R/12`; this manuscript reads the saved figures and tables.
+
+# Data integrity
+
+Script `02_verify_data.R` confirms that all 25 documented CSVs are present with the expected record and variable counts, that identifiers are unique at their stated level, and that all 12,153 NNPAS persons link to biomedical, food, supplement and ADG files. Day-1 energy summed from the food file reproduces the person-file total `ENERGYF1` to within 0.07 kJ ($r=1.000$).
+
+Three properties of the files shape everything downstream. The person file already carries day-1 and day-2 nutrient totals, percentage-of-energy breakdowns and ADG serves, so the 226 MB food file is needed only for food-occasion questions. Subsamples nest and shrink: all 12,153 have a day-1 recall; 7,735 (63.6\%) gave day 2; 4,444 (36.6\%) took part in the biomedical component; 3,375 (27.8\%) have fasting lipids. Biomarkers are ordered bands.
+
+```{r}
+inv <- read_csv(file.path(TAB, "01_subsample_flow.csv"), show_col_types = FALSE)
+ktab(inv, cap = "NNPAS subsample flow (unweighted counts).")
+```
+
+```{r, fig.cap="NNPAS subsample flow from the full person file to the fasting biomedical subsample."}
+fig("01_subsample_flow.png")
+```
+
+```{r, fig.cap="Missingness of analysis variables after sentinel codes are mapped to NA."}
+fig("02_missingness.png")
+```
+
+# Descriptive results (NNPAS)
+
+Adults 18 years and over, day-1 24-hour recall, unweighted unless noted. Mean BMI is 27.8 in men ($n=4{,}329$) and 27.3 in women ($n=5{,}106$). Overweight or obesity is 62.1\% (men) and 47.2\% (women). Mean energy intake is 9,743 kJ (men) and 7,397 kJ (women). Only 18.5\% of adults reached five vegetable serves and 6.5\% met both fruit and vegetable targets on the recall day. Sodium from food alone exceeded 2,000 mg for 53.1\% of adults. Median energy intake $\div$ BMR falls from 1.40 at normal BMI to 1.05 in obesity; 22.1\% of adults with a measured weight fall below a 0.9 plausibility cut-off. Day-1/day-2 correlations are 0.43 (energy), 0.44 (fibre), 0.30 (sodium) and 0.26 (vegetable serves). High triglycerides rise from 5.9\% (normal BMI) to 26.3\% (obese); low HDL from 13.0\% to 34.4\%.
+
+```{r, fig.cap="Age, sex, SEIFA and country-of-birth composition of NNPAS adults."}
+fig("03_demographics.png")
+```
+
+```{r, fig.cap="Energy intake and macronutrient shares, day-1 recall, adults 18+."}
+fig("04_energy_and_macronutrients.png")
+```
+
+```{r, fig.cap="Australian Dietary Guideline target adherence on the recall day."}
+fig("05_adg_targets.png")
+```
+
+```{r, fig.cap="Food-group serves (ADG) among NNPAS adults."}
+fig("06_food_group_serves.png")
+```
+
+```{r, fig.cap="Sodium intake from food, relative to the 2,000 mg reference."}
+fig("07_sodium.png")
+```
+
+```{r, fig.cap="BMI and waist-circumference distributions."}
+fig("08_adiposity.png")
+```
+
+```{r, fig.cap="Energy under-reporting: EI:BMR by BMI class. Under-reporting increases with BMI, so crude diet--adiposity associations are attenuated or reversed."}
+fig("09_energy_underreporting.png")
+```
+
+```{r, fig.cap="Selected diet measures against BMI. Reported fibre and energy both decrease with BMI --- a fingerprint of differential under-reporting, not of biology."}
+fig("10_diet_vs_bmi.png")
+```
+
+```{r, fig.cap="Nutrient-nutrient correlations. Absolute intakes are strongly collinear (energy--fat $\\rho=0.83$); densities are the appropriate regression inputs."}
+fig("11_nutrient_correlations.png")
+```
+
+```{r, fig.cap="Biomedical biomarker band distributions (Basic CURF ranged variables)."}
+fig("12_biomarker_bands.png")
+```
+
+```{r, fig.cap="Lipid status by BMI category in the NNPAS biomedical subsample."}
+fig("13_lipids_by_bmi.png")
+```
+
+```{r, fig.cap="Fibre density versus HDL status --- a representative diet--biomarker scatter after energy adjustment."}
+fig("14_fibre_vs_hdl.png")
+```
+
+```{r, fig.cap="Day-1 versus day-2 nutrient intakes. A single 24-hour recall is a noisy measure of usual intake."}
+fig("15_day1_vs_day2.png")
+```
+
+```{r}
+rel <- read_csv(file.path(TAB, "15_day1_day2_reliability.csv"), show_col_types = FALSE)
+ktab(rel, cap = "Day-1/day-2 reliability of selected dietary measures.")
+```
+
+# Reproduction of Engelen et al. (2017)
+
+Engelen et al.\ [8] cross-classify NNPAS adults into four physical-activity $\times$ sitting-time groups at the weighted medians and relate group membership to cardiovascular disease, diabetes and metabolic syndrome. We recover the published sample (9,435 adults 18+; analytical $n=9{,}403$; 3,803 biomedical), the weighted PA median (160 min/week) and the sitting mean/median/IQR (38.8, 36.0, 23.0--52.5 h/week). Total physical activity is the Active Australia score: `EXLWTBC + EXLWVBC`. The 32 records with missing sitting time are dropped; 107 records with missing PA minutes are set to zero, which is the unique rule that produces $n=9{,}403$.
+
+Every one of the 36 published odds ratios falls inside our 95\% confidence interval (median absolute log-ratio 0.042). Relative to high PA--low sitting, low PA--high sitting has 1.38 times the odds of CVD (published 1.41) and 2.37 times the odds of metabolic syndrome (published 2.37). No PA--sitting combination is significantly associated with diabetes. Person-level jackknife replicate weights (`WPM0101`--`WPM0160`) are used for the full-sample models.
+
+Outcome prevalence is the main residual discrepancy: CVD 21.5\% versus 24.1\% published; diabetes 5.9\% versus 5.1\%. The paper does not list which conditions count as CVD. Metabolic syndrome cannot be point-identified because the triglyceride cut-point 1.7 mmol/L falls inside a released band; $\ge 2.0$ gives 13.4\% and $\ge 1.5$ gives 18.5\%, bracketing the published 16.1\%.
+
+```{r}
+prev <- read_csv(file.path(TAB, "engelen_03_outcome_prevalence.csv"), show_col_types = FALSE)
+ktab(prev, cap = "Engelen et al. outcome prevalence: published versus reproduced.")
+```
+
+```{r, fig.cap="Forest plot of all 36 Engelen Table 2 odds ratios (ours vs published). Every published OR lies inside our 95\\% CI."}
+fig("repro_engelen_01_forest.png")
+```
+
+```{r, fig.cap="Agreement between reproduced and published odds ratios."}
+fig("repro_engelen_02_agreement.png")
+```
+
+```{r, fig.cap="Outcome prevalence across PA--sitting groups."}
+fig("repro_engelen_03_prevalence_gradient.png")
+```
+
+The other five AHS papers on these files are dietary-description studies. Lei et al.\ [10] is largely reproducible (exact $n=8{,}202$; free sugars within 0.5\%). Sui et al.\ [11,12] and Machado et al.\ [13] are partial: mixed-dish disaggregation or unpublished NOVA lookups block full Table 1 recovery; `DISCFLG` is a validated proxy for Machado. Brand-Miller and Barclay [14] is not reproducible from this dump (1995 survey, FAOSTAT, Nielsen).
+
+# Cardiometabolic health beyond BMI
+
+## C-RQ1. Agreement of BMI with biomarker risk
+
+Analysis sample: 3,525 adults 18+ with all five core markers and a measured BMI. Weighted prevalence of elevated risk is 19\% at normal BMI and 58\% in obesity. Cohen's $\kappa=0.245$. As a test for elevated risk, BMI $\ge 25$ has sensitivity 0.81, specificity 0.45 and PPV 0.53. Discrimination (AUC): age 0.705, waist 0.701, BMI 0.688, BMI $\ge 25$ as a binary 0.630. Age out-discriminates both adiposity measures. A seven-marker score on the fasting subsample gives $\kappa=0.195$.
+
+```{r tab-agreement}
+agr <- read_csv(file.path(TAB, "cmr_04_bmi_agreement.csv"), show_col_types = FALSE)
+ktab(agr, cap = "Agreement of overweight-or-obese versus elevated biomarker risk.")
+```
+
+```{r tab-risk-factors}
+rf <- read_csv(file.path(TAB, "cmr_01_risk_factor_prevalence.csv"), show_col_types = FALSE)
+ktab(rf, cap = "Weighted prevalence of the five component risk factors.")
+```
+
+```{r, fig.cap="BMI category versus biomarker-defined cardiometabolic risk. The two classifications overlap only modestly ($\\kappa=0.25$)."}
+fig("rq1_01_bmi_vs_risk.png")
+```
+
+```{r, fig.cap="Distribution of the five-factor risk score within BMI categories. BMI shifts the mean but does not separate the groups."}
+fig("rq1_02_score_distribution.png")
+```
+
+```{r, fig.cap="Which risk factors drive the BMI gradient? Blood pressure, dysglycaemia and low HDL track BMI; total cholesterol barely does."}
+fig("rq1_03_risk_factors_by_bmi.png")
+```
+
+## C-RQ2. Who has elevated risk, and does it differ by BMI?
+
+Survey-weighted logistic regression with BMI-class $\times$ predictor interactions, $n \approx 3{,}200$ complete cases, 1,487 events. Holm-adjusted joint tests leave four terms: BMI category ($p=1.4\times 10^{-8}$), age ($p=9.9\times 10^{-8}$), smoking ($p=0.007$) and self-rated health ($p=0.041$). Every dietary and physical-activity variable has Holm $p=1.00$. No BMI-class interaction survives correction (smallest raw interaction $p=0.185$). Normal-BMI simple slopes agree with a genuinely normal-BMI-only model, so the pooled specification is not hiding stratum-specific diet effects.
+
+```{r}
+jt <- read_csv(file.path(TAB, "rq2_02_joint_tests.csv"), show_col_types = FALSE)
+ktab(jt, cap = "C-RQ2 joint Wald tests (Holm-adjusted across 18 predictors).")
+```
+
+```{r, fig.cap="Main-effect odds ratios for elevated biomarker risk, survey-weighted. Age, BMI, smoking and self-rated health dominate; diet and activity do not."}
+fig("rq2_01_main_effects.png")
+```
+
+```{r, fig.cap="BMI-class-specific odds ratios. Interactions are compatible with a common slope after Holm correction."}
+fig("rq2_02_stratum_specific.png")
+```
+
+```{r, fig.cap="Normal-BMI phenotypes: elevated versus favourable biomarker risk. The contrast is age and smoking, not diet as measured here."}
+fig("rq2_03_normal_bmi_phenotypes.png")
+```
+
+## C-RQ3. Out-of-sample prediction beyond age, sex and BMI
+
+Elastic-net logistic regression, 20 $\times$ 5-fold CV, bootstrap over individuals. Adding BMI to age and sex raises AUC from 0.704 to 0.755 ($+0.051$). Adding activity, diet, SES and smoking raises it further to 0.762 ($+0.007$ versus the BMI baseline; 95\% CI 0.003 to 0.012; $p=0.002$) --- 13\% of the BMI gain, almost entirely from smoking. The diet block is indistinguishable from zero. Twenty-three predictors without BMI cannot recover what BMI provides (AUC 0.721).
+
+```{r tab-rq3-perf}
+perf <- read_csv(file.path(TAB, "rq3_01_performance.csv"), show_col_types = FALSE) |>
+  select(model, n_predictors, auc_mean, brier_mean)
+ktab(perf, cap = "C-RQ3 cross-validated performance.")
+```
+
+```{r tab-rq3-diff}
+pd <- read_csv(file.path(TAB, "rq3_02_paired_differences.csv"), show_col_types = FALSE) |>
+  filter(metric == "auc") |>
+  select(model, observed_diff, lcl, ucl, p)
+ktab(pd, cap = "Paired AUC differences versus age + sex + BMI, individual-level bootstrap.")
+```
+
+```{r, fig.cap="Cross-validated AUC by nested model. The age + sex + BMI baseline (dashed) is barely improved by the remaining blocks."}
+fig("rq3_01_auc_by_model.png")
+```
+
+```{r, fig.cap="Bootstrap confidence intervals for AUC differences versus the BMI baseline."}
+fig("rq3_02_auc_differences.png")
+```
+
+```{r, fig.cap="Pooled out-of-fold ROC curves."}
+fig("rq3_03_roc.png")
+```
+
+```{r, fig.cap="Calibration of the full model."}
+fig("rq3_04_calibration.png")
+```
+
+## Robustness of the diet null
+
+The diet block was rebuilt from the food file: discretionary-food energy share (`DISCFLG`; 35.44\%, matching the ABS published figure) plus eleven ADG food-group densities (g/MJ) and solid-food energy density. The joint Wald test of all 13 new exposures is $F=1.09$ on 13 and 17 df, $p=0.424$. The best single exposure (energy density) has Holm $p=0.365$. Replacing the original diet block in C-RQ3 changes AUC by $-0.0007$ (95\% CI $-0.0026$ to $+0.0012$). Unadjusted elevated-risk prevalence is flat across discretionary quintiles (40.7\% to 43.3\%), and mean age is within 0.09 SD of the sample mean in every quintile.
+
+```{r, fig.cap="Elevated-risk prevalence by quintile of discretionary-food energy share. The gradient is essentially flat."}
+fig("rq4_01_discretionary_gradient.png")
+```
+
+```{r}
+dpred <- read_csv(file.path(TAB, "rq4_02_enhanced_diet_prediction.csv"), show_col_types = FALSE)
+ktab(dpred, cap = "C-RQ3 AUC after replacing or stacking the food-file diet block.")
+```
+
+These are findings about *measurement*. Day-1/day-2 correlations near 0.4 imply substantial attenuation; NNPAS-grade diet cannot detect diet--biomarker associations at this sample size. That is not evidence that diet is biologically irrelevant.
+
+# Unrecognised lipid abnormalities (NHS)
+
+## Outcome definitions
+
+Biomedical adults 18+: $n=5{,}761$; total cholesterol measured in 5,683; `CVDMEDST` valid in 4,353 (fasted only). Self-report: 2,368 adults have a high-cholesterol condition record (1,580 current, 788 ever-but-not-current). Among measured-high adults, 88.3\% have no current self-report --- matching the ABS $\approx 89\%$ figure [6] --- but of current self-reporters with known medication status, 75.5\% are on lipid-lowering therapy. Measured levels and awareness answer different questions. Untreated dyslipidaemia (`CVDMEDST=3`) affects 52.0\% of fasted adults, too common to triage. Cholesterol-testing history (`CHOL5YR`) is asked universally only from age 45.
+
+```{r tab-outcome-variants}
+ov <- read_csv(file.path(TAB, "10_outcome_variants.csv"), show_col_types = FALSE)
+ktab(ov, cap = "NHS lipid outcome variants (unweighted counts, biomedical adults 18+).")
+```
+
+```{r tab-predictor-avail}
+pr <- read_csv(file.path(TAB, "10_predictor_availability.csv"), show_col_types = FALSE)
+ktab(pr, cap = "Predictor availability in the NHS biomedical adult sample.")
+```
+
+## BMI and waist as screening indicators
+
+Weighted prevalence of high total cholesterol is 28.4\% at normal BMI, 38.1\% when overweight, 37.2\% in obese class I and 39.5\% in obese class II--III --- a shallow, flattening gradient. Waist categories are non-monotonic (27.3\%, 40.1\%, 37.5\%). BMI $\times$ age interaction $p=4\times 10^{-9}$; BMI $\times$ sex $p=0.31$. The odds ratio per 5 kg/m$^2$ is 1.46 at ages 18--34 and 0.80--0.91 at 55+, i.e.\ it reverses, consistent with treatment concentrated in heavier older adults.
+
+Single-marker weighted AUC: for high total cholesterol, age 0.605 beats BMI 0.572 and waist 0.565; for low HDL, BMI 0.657 beats waist 0.621 and age is useless (0.493). Age- and sex-adjusted OR per 5 kg/m$^2$: low HDL 1.73 (1.57--1.91); untreated dyslipidaemia 1.37 (1.27--1.47); high LDL 1.17 (1.09--1.25); high total cholesterol 1.13 (1.07--1.21). This is the same split C-RQ1 found in NNPAS: HDL tracks BMI; total cholesterol barely does.
+
+```{r, fig.cap="Weighted prevalence of high total cholesterol and of high cholesterol without current self-report, by BMI category."}
+fig("chol_01_bmi_category.png")
+```
+
+```{r, fig.cap="The same outcomes by sex-specific waist-risk category. The gradient is shallow and non-monotonic."}
+fig("chol_02_waist_category.png")
+```
+
+```{r, fig.cap="Age and sex pattern of high total cholesterol. Prevalence falls after 65 because of treatment, not biology."}
+fig("chol_03_age_sex.png")
+```
+
+```{r, fig.cap="Odds ratio for high total cholesterol per 5 kg/m$^2$ of BMI, by age and sex. The association reverses after mid-life."}
+fig("chol_04_bmi_or_by_age_sex.png")
+```
+
+```{r, fig.cap="Which lipid you choose decides whether BMI and waist are useful. BMI discriminates low HDL; age dominates total cholesterol."}
+fig("chol_05_auc_by_outcome.png")
+```
+
+```{r, fig.cap="BMI gradient across four lipid outcomes. Low HDL tracks BMI steeply; total and LDL cholesterol barely respond."}
+fig("chol_06_bmi_gradient_all_outcomes.png")
+```
+
+```{r, fig.cap="Age- and sex-adjusted odds ratios for BMI (per 5 kg/m$^2$) and waist (per 10 cm)."}
+fig("chol_07_adjusted_or.png")
+```
+
+## L-RQ1. Out-of-sample identification
+
+Complete-case $n=4{,}699$ (cholesterol/HDL) and $3{,}609$ (untreated dyslipidaemia). For the original candidate outcome (high cholesterol, not self-reported), AUC is 0.581 with age + sex and 0.576 with every named non-laboratory predictor --- slightly worse. At matched testing volume the full model finds 58.6\% of cases against 58.8\% for ``test everyone aged 45+''. The same comparison for low HDL is 72.3\% versus 46.5\% ($+26$ percentage points); for untreated dyslipidaemia, 57.1\% versus 50.5\%.
+
+```{r tab-l-cv}
+cvp <- read_csv(file.path(TAB, "12_cv_performance.csv"), show_col_types = FALSE) |>
+  select(outcome_label, model, auc, brier, n)
+ktab(cvp, cap = "L-RQ1 nested elastic-net CV (weighted AUC).")
+```
+
+```{r tab-l-policy}
+pol <- read_csv(file.path(TAB, "12_policy_comparison.csv"), show_col_types = FALSE) |>
+  select(outcome, policy, share_tested, cases_found)
+ktab(pol, cap = "Cases found at matched testing volume versus the age-45 rule.")
+```
+
+```{r, fig.cap="Cross-validated weighted AUC. For total cholesterol the full model does not improve on age and sex; for low HDL it does."}
+fig("chol_08_cv_auc.png")
+```
+
+```{r, fig.cap="Share of cases detected when each policy tests the same fraction of the population as `test everyone aged 45+'."}
+fig("chol_09_policy_comparison.png")
+```
+
+## L-RQ2. Who is missed
+
+At a fixed threshold flagging the riskiest 40\% of adults for high total cholesterol, 1.1\% of ages 18--34 are flagged and 97.5\% of ages 65+. Within-band AUC is 0.601 (18--34), then 0.539, 0.507, 0.458, 0.468 (65+): worse than chance after 55. The model is weakest in the most disadvantaged SEIFA quintile (AUC 0.521 versus 0.596--0.618 elsewhere).
+
+Among adults 45+ with testing history ($n=3{,}720$), 8.9\% report no cholesterol test in five years. Higher BMI predicts already being tested (OR 0.927 per kg/m$^2$, 95\% CI 0.886--0.971); each SEIFA decile toward advantage also lowers the odds of going untested (OR 0.900). Clinicians already triage on body size, which is why BMI has no headroom left as a total-cholesterol screen.
+
+```{r, fig.cap="Share flagged and sensitivity at a single 40\\% risk threshold, by age, sex and area disadvantage. The rule is an age cut-off in disguise."}
+fig("chol_10_subgroup_equity.png")
+```
+
+```{r, fig.cap="Within-subgroup weighted AUC for high total cholesterol. Performance collapses inside older age bands and is weakest in SEIFA Q1."}
+fig("chol_10b_subgroup_auc.png")
+```
+
+```{r, fig.cap="Who among adults 45+ has had no cholesterol test in five years. Untested status is concentrated in the youngest of the 45+ band, current smokers, and more disadvantaged areas."}
+fig("chol_11_untested_by_group.png")
+```
+
+```{r}
+ut <- read_csv(file.path(TAB, "12_untested_model.csv"), show_col_types = FALSE)
+ktab(ut, cap = "Survey-weighted logistic model of being untested in five years (adults 45+).")
+```
+
+# Discussion
+
+Two independent surveys give the same structural result: BMI carries metabolic information, and almost none of it is about total cholesterol. Blood pressure, dysglycaemia and low HDL track body size; total and LDL cholesterol do not. That is why C-RQ1 finds $\kappa=0.25$, why age beats BMI for high total cholesterol, and why a non-laboratory model cannot beat an age-45 testing rule for unrecognised hypercholesterolaemia. It is also why the same model *can* beat that rule for low HDL.
+
+The practical implication for the group's candidate question is to move the primary lipid outcome from total cholesterol to HDL (and to the equity question of who a non-laboratory rule misses), and to keep C-RQ1 as the paired NNPAS question: BMI and biomarker risk are not interchangeable, and routine behaviour as measured in a 24-hour recall does not identify the discordant phenotypes.
+
+Limitations are those of a cross-sectional Basic CURF. Lipids are banded; `CVDMEDST` and LDL require fasting; testing history is age-gated; lipid-lowering therapy confounds measured cholesterol at older ages; NNPAS has no smoking item in the models that used NHS smoking, and the NHS has no diet; self-rated health may be a consequence of risk rather than a cause. Negative diet findings should not be read as biology. Inference is associational throughout.
+
+# References
+
+\small
+
+\setlength{\parindent}{0pt}
+
+[1] National Vascular Disease Prevention Alliance. *Guidelines for the management of absolute cardiovascular disease risk*. Canberra: NVDPA; 2012.
+
+[2] Department of Health and Aged Care. *Australian guideline and calculator for assessing and managing cardiovascular disease risk*. Canberra: Commonwealth of Australia; 2023.
+
+[3] Wildman RP, Muntner P, Reynolds K, et al. The obese without cardiometabolic risk factor clustering and the normal weight with clustering. *Arch Intern Med*. 2008;168(15):1617--1624.
+
+[4] Tomiyama AJ, Hunger JM, Nguyen-Cuu J, Wells C. Misclassification of cardiometabolic health when using body mass index categories in NHANES 2005--2012. *Int J Obes*. 2016;40(5):883--886.
+
+[5] Stefan N, Schick F, H\"aring HU. Causes, characteristics, and consequences of metabolically unhealthy normal weight in humans. *Cell Metab*. 2017;26(2):292--300.
+
+[6] Australian Bureau of Statistics. *Australian Health Survey: Biomedical Results for Chronic Diseases, 2011--12*. Cat.\ no.\ 4364.0.55.005. Canberra: ABS; 2013.
+
+[7] Janus ED, Tideman PA, Dunbar JA, et al. Dyslipidaemia in rural Australia: prevalence, awareness, and treatment. *Med J Aust*. 2010;192(3):127--132.
+
+[8] Engelen L, Gale J, Chau JY, et al. Who is at high risk of cardiovascular and metabolic health problems? Associations of sitting, physical activity and cardio-metabolic disease in Australian adults. *Aust N Z J Public Health*. 2017;41(2):178--183.
+
+[9] Gaziano TA, Young CR, Fitzmaurice G, Atwood S, Gaziano JM. Laboratory-based versus non-laboratory-based method for assessment of cardiovascular disease risk. *Lancet*. 2008;371(9618):923--931.
+
+[10] Lei L, Rangan A, Flood VM, Louie JCY. Dietary intake and food sources of added sugar in the Australian population. *Br J Nutr*. 2016;115(5):868--877.
+
+[11] Sui Z, Raubenheimer D, Cunningham J, Rangan A. Temporal eating patterns: associations with nutrient intakes, diet quality, and measures of obesity. *BMC Nutrition*. 2017.
+
+[12] Sui Z, Wong WK, Louie JCY, Rangan A. Discretionary food associated with diet quality and body size. *Public Health Nutr*. 2017.
+
+[13] Machado PP, Steele EM, Levy RB, et al. Ultra-processed food consumption and obesity in the Australian adult population. *BMJ Open*. 2019;9:e029544.
+
+[14] Brand-Miller JC, Barclay AW. Declining consumption of added sugars and sugar-sweetened beverages in Australia: a focus on sports drinks. *Am J Clin Nutr*. 2017.
+
+[15] Kipnis V, Subar AF, Midthune D, et al. Structure of dietary measurement error: results from the OPEN biomarker study. *Am J Epidemiol*. 2003;158(1):14--21.
+
+# Appendix: additional tables
+
+```{r tab-app-disc}
+disc <- read_csv(file.path(TAB, "cmr_05_discrimination.csv"), show_col_types = FALSE)
+ktab(disc, cap = "Single-marker AUC for elevated biomarker cardiometabolic risk (NNPAS).")
+```
+
+```{r tab-app-bmi-n}
+bmi_prev <- read_csv(file.path(TAB, "cmr_02_bmi_by_risk.csv"), show_col_types = FALSE)
+ktab(bmi_prev, cap = "Unweighted elevated-risk counts by BMI category.")
+```
+
+```{r tab-app-wprev}
+wprev <- read_csv(file.path(TAB, "cmr_03_weighted_prevalence_by_bmi.csv"), show_col_types = FALSE)
+ktab(wprev, cap = "Weighted elevated-risk prevalence by BMI category.")
+```
+
+```{r tab-app-aucm}
+aucm <- read_csv(file.path(TAB, "11_auc_marker_by_outcome.csv"), show_col_types = FALSE) |>
+  select(outcome, marker, n, auc, lcl, ucl)
+ktab(aucm, cap = "Weighted AUC of BMI, waist, age and systolic BP for four lipid outcomes (NHS).")
+```
+
+```{r tab-app-adj}
+adj <- read_csv(file.path(TAB, "11_adjusted_or.csv"), show_col_types = FALSE)
+ktab(adj, cap = "Age- and sex-adjusted odds ratios for BMI and waist.")
+```
+
+```{r tab-app-int}
+intt <- read_csv(file.path(TAB, "11_interaction_tests.csv"), show_col_types = FALSE)
+ktab(intt, cap = "BMI $\\times$ age and BMI $\\times$ sex tests for high total cholesterol.", escape = FALSE)
+```
+
+```{r tab-app-orx}
+orx <- read_csv(file.path(TAB, "11_bmi_or_by_age_sex.csv"), show_col_types = FALSE)
+ktab(orx, cap = "Odds ratio per 5 kg/m$^2$ for high total cholesterol, by age and sex.", escape = FALSE)
+```
+
+```{r tab-app-eng-exp}
+eng2 <- read_csv(file.path(TAB, "engelen_01_exposure_check.csv"), show_col_types = FALSE)
+ktab(eng2, cap = "Engelen exposure check (weighted PA and sitting).")
+```
+
+```{r tab-app-eng-grp}
+gs <- read_csv(file.path(TAB, "engelen_02_group_sizes.csv"), show_col_types = FALSE)
+ktab(gs, cap = "PA--sitting group sizes, published versus reproduced.")
+```
+
+\clearpage
+
+The remaining CSV tables (`rq2_01` main effects, `rq2_04` stratum-specific ORs, `rq3_00` fold-level CV, `rq3_04` coefficients, `rq4_01` new exposures, `12_subgroup_performance`, `verify_*`) are in `outputs/tables/` and can be regenerated by `R/run_all.R`.
